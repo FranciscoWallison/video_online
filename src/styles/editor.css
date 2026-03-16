@@ -1,312 +1,72 @@
-/* ===== EDITOR VIEW ===== */
-.editor-container {
-  display: grid;
-  grid-template-columns: 1fr 280px;
+/* ===== DONE VIEW (after recording) ===== */
+.done-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 20px;
-  height: calc(100vh - 120px);
+  max-width: 500px;
+  margin: 0 auto;
+  padding-top: 40px;
+  text-align: center;
 }
 
-.editor-main {
+.done-icon {
+  animation: pop-in 0.4s ease;
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0); }
+  70% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+.done-container h2 {
+  font-size: 1.5rem;
+}
+
+.done-info {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.done-container .btn-quick-download {
+  text-decoration: none;
+  cursor: pointer;
+  width: 100%;
+  justify-content: center;
+}
+
+.done-actions {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-height: 0;
+  gap: 12px;
+  width: 100%;
 }
 
-.player-area {
+.done-actions .btn-secondary {
   flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
-.video-wrapper {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  background: #000;
+.preview-area {
+  width: 100%;
+  max-width: 700px;
+  margin-top: 8px;
   border-radius: var(--radius-lg);
   overflow: hidden;
+  background: #000;
 }
 
-#editor-video {
+.preview-area video {
   width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.sticker-overlay {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.sticker-overlay .sticker-item {
-  pointer-events: all;
-}
-
-.player-controls {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.player-controls label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
-.player-controls select {
-  padding: 4px 8px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 0.85rem;
-}
-
-/* Timeline */
-.timeline-area {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-}
-
-.timeline-area h3 {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 12px;
-}
-
-.timeline-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-#timeline-canvas {
-  width: 100%;
-  height: 60px;
-  background: var(--bg-secondary);
-  border-radius: var(--radius);
-}
-
-.trim-controls {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.trim-controls label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
-.trim-controls input[type="range"] {
-  flex: 1;
-  accent-color: var(--accent);
-}
-
-.trim-controls span {
-  font-variant-numeric: tabular-nums;
-  min-width: 40px;
-  color: var(--text-primary);
-  font-size: 0.85rem;
-}
-
-/* Editor sidebar */
-.editor-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
-}
-
-.sticker-panel, .export-panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-}
-
-.sticker-panel h3, .export-panel h3 {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 12px;
-}
-
-.sticker-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.sticker-grid .sticker-thumb {
-  width: 100%;
-  aspect-ratio: 1;
-  padding: 8px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--transition);
-}
-
-.sticker-thumb:hover {
-  border-color: var(--accent);
-  background: var(--bg-hover);
-}
-
-.sticker-thumb svg, .sticker-thumb img {
-  width: 100%;
-  height: 100%;
-}
-
-.export-options {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.export-options label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-}
-
-.export-options select {
-  padding: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  font-size: 0.85rem;
-}
-
-.btn-quick-download {
-  text-align: center;
-  cursor: pointer;
-  width: 100%;
-  justify-content: center;
-}
-
-.export-divider {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 12px 0;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-}
-
-.export-divider::before,
-.export-divider::after {
-  content: '';
-  flex: 1;
-  border-top: 1px solid var(--border);
-}
-
-.export-warning {
-  padding: 8px 12px;
-  background: rgba(241, 196, 15, 0.1);
-  border: 1px solid rgba(241, 196, 15, 0.3);
-  border-radius: var(--radius);
-  color: #f1c40f;
-  font-size: 0.8rem;
-  margin-top: 8px;
-  animation: pulse-warning 2s ease infinite;
-}
-
-@keyframes pulse-warning {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
-}
-
-.btn-download {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-  background: var(--success);
-  color: white;
-  border-radius: var(--radius);
-  font-weight: 600;
-  margin-top: 8px;
-  transition: opacity var(--transition);
-}
-
-.btn-download:hover {
-  opacity: 0.9;
-}
-
-/* Sticker items on video */
-.sticker-item {
-  position: absolute;
-  cursor: move;
-  user-select: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.sticker-item img, .sticker-item svg {
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-
-.sticker-item .sticker-delete {
-  position: absolute;
-  top: -8px;
-  right: -8px;
-  width: 20px;
-  height: 20px;
-  background: var(--danger);
-  color: white;
-  border: none;
-  border-radius: 50%;
-  font-size: 12px;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-}
-
-.sticker-item:hover .sticker-delete {
-  display: flex;
+  max-height: 400px;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .editor-container {
-    grid-template-columns: 1fr;
-    height: auto;
-  }
-
   .capture-options {
     grid-template-columns: 1fr;
   }
 
-  .trim-controls {
-    grid-template-columns: 1fr;
+  .done-actions {
+    flex-direction: column;
   }
 }
