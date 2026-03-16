@@ -203,10 +203,22 @@
                   </select>
                 </label>
               </div>
-              <button id="btn-export" class="btn-primary">Exportar Vídeo</button>
+              <a id="btn-quick-download" class="btn-primary btn-quick-download">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                Download Rápido (WebM)
+              </a>
+              <div class="export-divider"><span>ou processar com edições</span></div>
+              <button id="btn-export" class="btn-secondary">Exportar com Edições</button>
               <div id="export-progress" class="progress-bar hidden">
                 <div class="progress-fill"></div>
                 <span class="progress-text">0%</span>
+              </div>
+              <div id="export-warning" class="export-warning hidden">
+                Processando... a tela pode ficar lenta por alguns segundos.
               </div>
               <a id="download-link" class="btn-download hidden" download>Baixar Vídeo</a>
             </div>

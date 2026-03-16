@@ -19,16 +19,30 @@ export function createCompositor(canvas, screenStream, webcamStream, options = {
   let running = true;
   let animFrameId = null;
 
+  // Max resolution to prevent performance issues
+  const MAX_WIDTH = 1920;
+  const MAX_HEIGHT = 1080;
+
+  function clampSize(w, h) {
+    if (w <= MAX_WIDTH && h <= MAX_HEIGHT) return { w, h };
+    const ratio = Math.min(MAX_WIDTH / w, MAX_HEIGHT / h);
+    return { w: Math.round(w * ratio), h: Math.round(h * ratio) };
+  }
+
   // Wait for video metadata to set canvas size
   const ready = new Promise((resolve) => {
     screenVideo.onloadedmetadata = () => {
+      let rawW, rawH;
       if (region) {
-        canvas.width = region.width;
-        canvas.height = region.height;
+        rawW = region.width;
+        rawH = region.height;
       } else {
-        canvas.width = screenVideo.videoWidth;
-        canvas.height = screenVideo.videoHeight;
+        rawW = screenVideo.videoWidth;
+        rawH = screenVideo.videoHeight;
       }
+      const { w, h } = clampSize(rawW, rawH);
+      canvas.width = w;
+      canvas.height = h;
       resolve();
     };
   });
