@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://franciscowallison.github.io/video_online/sitemap.xml
