@@ -282,10 +282,9 @@ function setupExport(blob) {
   const progressBar = $('#export-progress');
   const progressFill = $('.progress-fill');
   const progressText = $('.progress-text');
-  const exportWarning = $('#export-warning');
   const downloadLink = /** @type {HTMLAnchorElement} */ ($('#download-link'));
 
-  // === QUICK DOWNLOAD: no ffmpeg, just save the raw WebM ===
+  // === QUICK DOWNLOAD: instant, no processing ===
   btnQuickDownload.addEventListener('click', () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -296,46 +295,41 @@ function setupExport(blob) {
     showToast('Download iniciado!', 'success');
   });
 
-  // === FULL EXPORT: with ffmpeg processing ===
+  // === EXPORT WITH EDITS: uses Canvas + MediaRecorder (lightweight) ===
   btnExport.addEventListener('click', async () => {
     btnExport.disabled = true;
     progressBar.classList.remove('hidden');
-    exportWarning.classList.remove('hidden');
     downloadLink.classList.add('hidden');
+    progressText.textContent = 'Preparando...';
 
     try {
-      const format = /** @type {HTMLSelectElement} */ ($('#format-select')).value;
       const speed = parseFloat(/** @type {HTMLSelectElement} */ ($('#export-speed')).value);
-
-      progressText.textContent = 'Carregando ffmpeg...';
 
       const result = await exportVideo(blob, {
         trimStart: state.trimState.startTime,
         trimEnd: state.trimState.endTime,
         speed,
-        format,
+        format: 'webm',
       }, (progress) => {
         const pct = Math.round(progress * 100);
         progressFill.style.width = pct + '%';
-        progressText.textContent = `Processando... ${pct}%`;
+        progressText.textContent = `Exportando... ${pct}%`;
       });
 
       // Create download link
       const url = URL.createObjectURL(result);
       downloadLink.href = url;
-      downloadLink.download = `recording.${format}`;
-      downloadLink.textContent = `Baixar Vídeo (.${format})`;
+      downloadLink.download = 'recording_editado.webm';
+      downloadLink.textContent = 'Baixar Vídeo Editado (.webm)';
       downloadLink.classList.remove('hidden');
 
       progressFill.style.width = '100%';
-      progressText.textContent = '100% - Concluído!';
-      exportWarning.classList.add('hidden');
+      progressText.textContent = 'Concluído!';
       showToast('Exportação concluída!', 'success');
     } catch (err) {
       showToast('Erro na exportação: ' + err.message, 'error');
       console.error(err);
       progressBar.classList.add('hidden');
-      exportWarning.classList.add('hidden');
     } finally {
       btnExport.disabled = false;
     }

@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Screen Recorder & Editor</title>
-  <script src="coi-serviceworker.js"></script>
   <link rel="stylesheet" href="/src/styles/variables.css" />
   <link rel="stylesheet" href="/src/styles/layout.css" />
   <link rel="stylesheet" href="/src/styles/recorder.css" />
@@ -143,14 +142,12 @@
               </div>
               <div class="player-controls">
                 <label>
-                  Velocidade:
+                  Velocidade de Preview:
                   <select id="speed-select">
-                    <option value="0.25">0.25x</option>
                     <option value="0.5">0.5x</option>
                     <option value="1" selected>1x (Normal)</option>
                     <option value="1.5">1.5x</option>
                     <option value="2">2x</option>
-                    <option value="4">4x</option>
                   </select>
                 </label>
               </div>
@@ -183,26 +180,8 @@
             </div>
 
             <div class="export-panel">
-              <h3>Exportar</h3>
-              <div class="export-options">
-                <label>
-                  Formato:
-                  <select id="format-select">
-                    <option value="webm">WebM (Rápido)</option>
-                    <option value="mp4">MP4 (Compatível)</option>
-                  </select>
-                </label>
-                <label>
-                  Velocidade de Exportação:
-                  <select id="export-speed">
-                    <option value="1">1x (Normal)</option>
-                    <option value="1.5">1.5x</option>
-                    <option value="2">2x</option>
-                    <option value="4">4x</option>
-                    <option value="0.5">0.5x (Lento)</option>
-                  </select>
-                </label>
-              </div>
+              <h3>Salvar</h3>
+
               <a id="btn-quick-download" class="btn-primary btn-quick-download">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
@@ -211,14 +190,24 @@
                 </svg>
                 Download Rápido (WebM)
               </a>
-              <div class="export-divider"><span>ou processar com edições</span></div>
+
+              <div class="export-divider"><span>ou exportar com corte/velocidade</span></div>
+
+              <div class="export-options">
+                <label>
+                  Velocidade:
+                  <select id="export-speed">
+                    <option value="1">1x (Normal)</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2x</option>
+                    <option value="0.5">0.5x (Lento)</option>
+                  </select>
+                </label>
+              </div>
               <button id="btn-export" class="btn-secondary">Exportar com Edições</button>
               <div id="export-progress" class="progress-bar hidden">
                 <div class="progress-fill"></div>
                 <span class="progress-text">0%</span>
-              </div>
-              <div id="export-warning" class="export-warning hidden">
-                Processando... a tela pode ficar lenta por alguns segundos.
               </div>
               <a id="download-link" class="btn-download hidden" download>Baixar Vídeo</a>
             </div>
