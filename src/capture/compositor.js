@@ -1,8 +1,11 @@
+/**
+ * Canvas compositor — only used when webcam overlay or region crop is needed.
+ * For simple screen recording, we skip this entirely and record the raw stream.
+ */
 export function createCompositor(canvas, screenStream, webcamStream, options = {}) {
   const ctx = canvas.getContext('2d');
   const { region, webcamPosition } = options;
 
-  // Create hidden video elements for streams
   const screenVideo = document.createElement('video');
   screenVideo.srcObject = screenStream;
   screenVideo.muted = true;
@@ -17,11 +20,11 @@ export function createCompositor(canvas, screenStream, webcamStream, options = {
   }
 
   let running = true;
-  let animFrameId = null;
+  let intervalId = null;
 
-  // Max resolution to prevent performance issues
-  const MAX_WIDTH = 1920;
-  const MAX_HEIGHT = 1080;
+  // Limit resolution to keep it lightweight
+  const MAX_WIDTH = 1280;
+  const MAX_HEIGHT = 720;
 
   function clampSize(w, h) {
     if (w <= MAX_WIDTH && h <= MAX_HEIGHT) return { w, h };
@@ -29,7 +32,6 @@ export function createCompositor(canvas, screenStream, webcamStream, options = {
     return { w: Math.round(w * ratio), h: Math.round(h * ratio) };
   }
 
-  // Wait for video metadata to set canvas size
   const ready = new Promise((resolve) => {
     screenVideo.onloadedmetadata = () => {
       let rawW, rawH;
@@ -65,7 +67,6 @@ export function createCompositor(canvas, screenStream, webcamStream, options = {
         x = canvas.width - size - margin; y = canvas.height - size - margin; break;
     }
 
-    // Override with custom position if dragged
     if (pos.x !== undefined && pos.y !== undefined) {
       x = pos.x * canvas.width;
       y = pos.y * canvas.height;
@@ -77,7 +78,6 @@ export function createCompositor(canvas, screenStream, webcamStream, options = {
   function draw() {
     if (!running) return;
 
-    // Draw screen frame
     if (region) {
       ctx.drawImage(
         screenVideo,
@@ -88,7 +88,6 @@ export function createCompositor(canvas, screenStream, webcamStream, options = {
       ctx.drawImage(screenVideo, 0, 0, canvas.width, canvas.height);
     }
 
-    // Draw webcam circle overlay
     if (camVideo && webcamStream && webcamStream.active) {
       const { x, y, size } = getWebcamPosition();
       ctx.save();
@@ -98,25 +97,27 @@ export function createCompositor(canvas, screenStream, webcamStream, options = {
       ctx.drawImage(camVideo, x, y, size, size);
       ctx.restore();
 
-      // Draw border around webcam
       ctx.beginPath();
       ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
       ctx.strokeStyle = '#6c5ce7';
       ctx.lineWidth = 3;
       ctx.stroke();
     }
-
-    animFrameId = requestAnimationFrame(draw);
   }
 
   function start() {
-    draw();
-    return canvas.captureStream(30);
+    // Use setInterval at 15fps instead of requestAnimationFrame (60fps)
+    // Much lighter on CPU
+    intervalId = setInterval(draw, 1000 / 15);
+    return canvas.captureStream(15);
   }
 
   function stop() {
     running = false;
-    if (animFrameId) cancelAnimationFrame(animFrameId);
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
     screenVideo.pause();
     screenVideo.srcObject = null;
     if (camVideo) {

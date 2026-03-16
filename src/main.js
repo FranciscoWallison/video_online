@@ -21,6 +21,7 @@ const state = {
   region: null,
   webcamPosition: null,
   screenStream: null,
+  micStream: null,
   compositor: null,
   recorder: null,
   recordedBlob: null,
@@ -30,11 +31,11 @@ const state = {
   recordingStartTime: 0,
   pausedDuration: 0,
   pauseStartTime: 0,
+  needsCompositor: false,
 };
 
 // ============ SETUP VIEW ============
 function initSetup() {
-  // Capture type selection
   for (const btn of $$('.capture-btn')) {
     btn.addEventListener('click', () => {
       $$('.capture-btn').forEach(b => b.classList.remove('active'));
@@ -43,7 +44,6 @@ function initSetup() {
     });
   }
 
-  // Webcam toggle
   const webcamToggle = $('#toggle-webcam');
   const webcamOptions = $('#webcam-position-options');
   const webcamPreviewContainer = $('#webcam-preview-container');
@@ -72,7 +72,6 @@ function initSetup() {
     }
   });
 
-  // Audio toggles
   $('#toggle-system-audio').addEventListener('change', (e) => {
     state.systemAudio = e.target.checked;
   });
@@ -80,7 +79,6 @@ function initSetup() {
     state.micEnabled = e.target.checked;
   });
 
-  // Start recording button
   $('#btn-start-recording').addEventListener('click', startRecording);
 }
 
@@ -113,60 +111,81 @@ async function startRecording() {
       state.region = null;
     }
 
-    // 3. Setup compositor
-    const canvas = /** @type {HTMLCanvasElement} */ ($('#recording-canvas'));
+    // 3. Decide: compositor needed only if webcam OR region crop
     const webcamStream = state.webcamEnabled ? getWebcamStream() : null;
+    state.needsCompositor = !!(webcamStream || state.region);
 
-    state.compositor = createCompositor(canvas, state.screenStream, webcamStream, {
-      region: state.region,
-      webcamPosition: state.webcamPosition,
-    });
+    let streamToRecord;
 
-    await state.compositor.ready;
-    const compositeStream = state.compositor.start();
+    if (state.needsCompositor) {
+      // Use canvas compositor (heavier, but needed for overlay/crop)
+      const canvas = /** @type {HTMLCanvasElement} */ ($('#recording-canvas'));
+      state.compositor = createCompositor(canvas, state.screenStream, webcamStream, {
+        region: state.region,
+        webcamPosition: state.webcamPosition,
+      });
+      await state.compositor.ready;
+      streamToRecord = state.compositor.start();
 
-    // 4. Setup webcam drag handle during recording
-    const webcamHandle = $('#webcam-drag-handle');
-    const webcamRecVideo = /** @type {HTMLVideoElement} */ ($('#webcam-recording'));
-    if (webcamStream) {
-      webcamRecVideo.srcObject = webcamStream;
-      webcamHandle.classList.remove('hidden');
-      setupDraggableWebcam(
-        webcamHandle,
-        $('.recording-preview-wrapper'),
-        state.webcamPosition
-      );
+      // Show preview canvas
+      canvas.classList.remove('hidden');
+
+      // Setup webcam drag handle
+      const webcamHandle = $('#webcam-drag-handle');
+      const webcamRecVideo = /** @type {HTMLVideoElement} */ ($('#webcam-recording'));
+      if (webcamStream) {
+        webcamRecVideo.srcObject = webcamStream;
+        webcamHandle.classList.remove('hidden');
+        setupDraggableWebcam(webcamHandle, $('.recording-preview-wrapper'), state.webcamPosition);
+      }
     } else {
-      webcamHandle.classList.add('hidden');
+      // DIRECT recording — no canvas, no overhead!
+      // Just show a simple preview via video element
+      streamToRecord = state.screenStream;
+      state.compositor = null;
+
+      // Hide the canvas, show a video preview instead
+      const canvas = $('#recording-canvas');
+      canvas.classList.add('hidden');
+
+      let previewVideo = $('#recording-preview-video');
+      if (!previewVideo) {
+        previewVideo = document.createElement('video');
+        previewVideo.id = 'recording-preview-video';
+        previewVideo.autoplay = true;
+        previewVideo.muted = true;
+        previewVideo.playsInline = true;
+        previewVideo.style.cssText = 'width:100%;height:100%;object-fit:contain;';
+        $('.recording-preview-wrapper').appendChild(previewVideo);
+      }
+      previewVideo.classList.remove('hidden');
+      previewVideo.srcObject = state.screenStream;
     }
 
-    // 5. Collect audio tracks
-    const audioTracks = [];
-    // System audio from screen stream
-    const screenAudioTracks = state.screenStream.getAudioTracks();
-    audioTracks.push(...screenAudioTracks);
+    $('#webcam-drag-handle').classList.toggle('hidden', !webcamStream);
 
-    // Microphone
+    // 4. Collect audio tracks
+    const audioTracks = [];
+    audioTracks.push(...state.screenStream.getAudioTracks());
+
     if (state.micEnabled) {
       try {
-        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioTracks.push(...micStream.getAudioTracks());
+        state.micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioTracks.push(...state.micStream.getAudioTracks());
       } catch (err) {
         showToast('Erro ao acessar microfone: ' + err.message, 'error');
       }
     }
 
-    // Mix audio
     const mixedAudio = mixAudioTracks(audioTracks);
 
-    // 6. Create and start recorder
-    state.recorder = createRecorder(compositeStream, mixedAudio);
+    // 5. Create and start recorder
+    state.recorder = createRecorder(streamToRecord, mixedAudio);
     state.recorder.start();
 
-    // 7. Switch to recording view
+    // 6. Switch to recording view
     switchView('recording');
     startTimer();
-
     showToast('Gravação iniciada!', 'success');
   } catch (err) {
     if (err.name === 'NotAllowedError') {
@@ -179,9 +198,9 @@ async function startRecording() {
 }
 
 function initRecording() {
-  // Pause/Resume
   const btnPause = $('#btn-pause');
   btnPause.addEventListener('click', () => {
+    if (!state.recorder) return;
     if (state.recorder.state === 'recording') {
       state.recorder.pause();
       btnPause.innerHTML = `
@@ -204,29 +223,45 @@ function initRecording() {
     }
   });
 
-  // Stop
   $('#btn-stop').addEventListener('click', stopRecording);
 }
 
 async function stopRecording() {
   if (!state.recorder) return;
 
+  // 1. Stop recorder first
+  let blob;
   try {
-    state.recordedBlob = await state.recorder.stop();
+    blob = await state.recorder.stop();
   } catch (err) {
     showToast('Erro ao parar gravação', 'error');
     console.error(err);
     return;
   }
 
-  // Cleanup
+  // 2. Cleanup all streams and compositor
   stopTimer();
-  if (state.compositor) state.compositor.stop();
+  if (state.compositor) {
+    state.compositor.stop();
+    state.compositor = null;
+  }
   if (state.screenStream) {
     state.screenStream.getTracks().forEach(t => t.stop());
+    state.screenStream = null;
+  }
+  if (state.micStream) {
+    state.micStream.getTracks().forEach(t => t.stop());
+    state.micStream = null;
   }
 
-  // Reset pause button
+  // Clean up preview video if used
+  const previewVideo = $('#recording-preview-video');
+  if (previewVideo) {
+    previewVideo.srcObject = null;
+    previewVideo.classList.add('hidden');
+  }
+
+  // Reset UI
   const btnPause = $('#btn-pause');
   btnPause.innerHTML = `
     <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
@@ -236,11 +271,18 @@ async function stopRecording() {
   btnPause.title = 'Pausar';
   $('.rec-dot').classList.remove('paused');
   $('#webcam-drag-handle').classList.add('hidden');
+  $('#recording-canvas').classList.remove('hidden');
 
-  // Switch to editor
+  // 3. Save blob and switch to editor after a brief delay
+  //    (let the browser release resources before loading editor)
+  state.recordedBlob = blob;
+
   switchView('editor');
-  initEditorWithBlob(state.recordedBlob);
-  showToast('Gravação concluída!', 'success');
+  // Use setTimeout to let the browser breathe before loading the video
+  setTimeout(() => {
+    initEditorWithBlob(state.recordedBlob);
+    showToast('Gravação concluída!', 'success');
+  }, 100);
 }
 
 // Timer
@@ -269,14 +311,21 @@ function stopTimer() {
 }
 
 // ============ EDITOR ============
+let exportListenersAttached = false;
+
 function initEditorWithBlob(blob) {
   state.player = setupPlayer(blob);
   state.trimState = setupTimeline(state.player.video);
   setupStickers();
-  setupExport(blob);
+
+  // Only attach export listeners once to avoid stacking
+  if (!exportListenersAttached) {
+    setupExport();
+    exportListenersAttached = true;
+  }
 }
 
-function setupExport(blob) {
+function setupExport() {
   const btnExport = $('#btn-export');
   const btnQuickDownload = $('#btn-quick-download');
   const progressBar = $('#export-progress');
@@ -286,7 +335,8 @@ function setupExport(blob) {
 
   // === QUICK DOWNLOAD: instant, no processing ===
   btnQuickDownload.addEventListener('click', () => {
-    const url = URL.createObjectURL(blob);
+    if (!state.recordedBlob) return;
+    const url = URL.createObjectURL(state.recordedBlob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'recording.webm';
@@ -295,8 +345,9 @@ function setupExport(blob) {
     showToast('Download iniciado!', 'success');
   });
 
-  // === EXPORT WITH EDITS: uses Canvas + MediaRecorder (lightweight) ===
+  // === EXPORT WITH EDITS ===
   btnExport.addEventListener('click', async () => {
+    if (!state.recordedBlob) return;
     btnExport.disabled = true;
     progressBar.classList.remove('hidden');
     downloadLink.classList.add('hidden');
@@ -305,7 +356,7 @@ function setupExport(blob) {
     try {
       const speed = parseFloat(/** @type {HTMLSelectElement} */ ($('#export-speed')).value);
 
-      const result = await exportVideo(blob, {
+      const result = await exportVideo(state.recordedBlob, {
         trimStart: state.trimState.startTime,
         trimEnd: state.trimState.endTime,
         speed,
@@ -316,7 +367,6 @@ function setupExport(blob) {
         progressText.textContent = `Exportando... ${pct}%`;
       });
 
-      // Create download link
       const url = URL.createObjectURL(result);
       downloadLink.href = url;
       downloadLink.download = 'recording_editado.webm';
@@ -337,20 +387,16 @@ function setupExport(blob) {
 }
 
 function initEditor() {
-  // New Recording button
   $('#btn-new-recording').addEventListener('click', () => {
     if (state.player) state.player.cleanup();
     state.recordedBlob = null;
     state.player = null;
     state.trimState = null;
 
-    // Reset export UI
     $('#export-progress').classList.add('hidden');
     $('#download-link').classList.add('hidden');
     $('.progress-fill').style.width = '0%';
     $('.progress-text').textContent = '0%';
-
-    // Clear stickers
     $('#sticker-canvas').innerHTML = '';
 
     switchView('setup');

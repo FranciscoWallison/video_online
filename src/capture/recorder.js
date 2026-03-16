@@ -16,7 +16,7 @@ export function createRecorder(compositeVideoStream, audioTracks = []) {
   const mimeType = pickMimeType();
   const recorder = new MediaRecorder(finalStream, {
     mimeType,
-    videoBitsPerSecond: 5_000_000,
+    videoBitsPerSecond: 2_500_000,
   });
 
   const chunks = [];

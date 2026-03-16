@@ -1,60 +1,56 @@
 /**
- * Export video using native browser APIs only (Canvas + MediaRecorder).
- * No ffmpeg.wasm — lightweight and won't freeze the browser.
- *
- * Strategy: play the source video on a hidden canvas at the desired speed,
- * capture the canvas stream with MediaRecorder, and record only the
- * trimmed portion.
+ * Lightweight export using Canvas + MediaRecorder.
+ * Plays the video at the desired speed, draws to a small canvas,
+ * and re-records only the trimmed portion at 15fps.
  */
 
 export function exportVideo(sourceBlob, options, onProgress) {
-  const { trimStart, trimEnd, speed, format } = options;
+  const { trimStart, trimEnd, speed } = options;
 
   return new Promise((resolve, reject) => {
     const video = document.createElement('video');
-    video.muted = false;
     video.playsInline = true;
+    // Must NOT be muted to capture audio via AudioContext
+    video.volume = 0; // silent for user but audio still flows
 
     const url = URL.createObjectURL(sourceBlob);
     video.src = url;
 
     video.onloadedmetadata = () => {
+      // Use a smaller canvas for export (max 1280x720)
+      const scale = Math.min(1, 1280 / video.videoWidth, 720 / video.videoHeight);
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      canvas.width = Math.round(video.videoWidth * scale);
+      canvas.height = Math.round(video.videoHeight * scale);
       const ctx = canvas.getContext('2d');
 
-      // Set playback speed
       video.playbackRate = speed || 1;
-
-      // Seek to trim start
       video.currentTime = trimStart || 0;
 
       const effectiveEnd = trimEnd || video.duration;
       const totalDuration = effectiveEnd - (trimStart || 0);
 
-      // Capture canvas stream
-      const canvasStream = canvas.captureStream(30);
+      // Capture canvas at 15fps
+      const canvasStream = canvas.captureStream(15);
 
-      // Add audio from video if available
+      // Try to capture audio
       try {
         const audioCtx = new AudioContext();
         const source = audioCtx.createMediaElementSource(video);
         const dest = audioCtx.createMediaStreamDestination();
         source.connect(dest);
-        source.connect(audioCtx.destination); // so we can hear during export? no, muted
+        // Don't connect to audioCtx.destination (would play audibly)
         for (const track of dest.stream.getAudioTracks()) {
           canvasStream.addTrack(track);
         }
       } catch (e) {
-        // No audio track, that's fine
+        // No audio — fine
       }
 
-      // Setup MediaRecorder
       const mimeType = pickMimeType();
       const recorder = new MediaRecorder(canvasStream, {
         mimeType,
-        videoBitsPerSecond: 5_000_000,
+        videoBitsPerSecond: 1_500_000,
       });
 
       const chunks = [];
@@ -64,43 +60,38 @@ export function exportVideo(sourceBlob, options, onProgress) {
 
       recorder.onstop = () => {
         URL.revokeObjectURL(url);
-        const outputMime = format === 'mp4' ? 'video/mp4' : mimeType;
-        const blob = new Blob(chunks, { type: outputMime });
-        resolve(blob);
+        resolve(new Blob(chunks, { type: mimeType }));
       };
 
       recorder.onerror = (e) => {
         URL.revokeObjectURL(url);
-        reject(new Error('Erro na gravação: ' + e.error?.message));
+        reject(new Error('Erro na exportação'));
       };
 
-      // Draw loop
-      let animId;
-      function drawFrame() {
-        if (video.currentTime >= effectiveEnd || video.ended) {
-          cancelAnimationFrame(animId);
-          recorder.stop();
-          video.pause();
-          return;
-        }
+      // Draw at 15fps using setInterval (lighter than requestAnimationFrame)
+      let drawInterval;
+      function startDrawing() {
+        recorder.start(500);
+        video.play();
 
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        drawInterval = setInterval(() => {
+          if (video.currentTime >= effectiveEnd || video.ended || video.paused) {
+            clearInterval(drawInterval);
+            recorder.stop();
+            video.pause();
+            return;
+          }
 
-        // Report progress
-        const elapsed = video.currentTime - (trimStart || 0);
-        if (onProgress && totalDuration > 0) {
-          onProgress(Math.min(elapsed / totalDuration, 1));
-        }
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-        animId = requestAnimationFrame(drawFrame);
+          const elapsed = video.currentTime - (trimStart || 0);
+          if (onProgress && totalDuration > 0) {
+            onProgress(Math.min(elapsed / totalDuration, 1));
+          }
+        }, 1000 / 15);
       }
 
-      // Start recording when video starts playing
-      video.onseeked = () => {
-        recorder.start(100);
-        drawFrame();
-        video.play();
-      };
+      video.onseeked = () => startDrawing();
     };
 
     video.onerror = () => {
@@ -112,9 +103,7 @@ export function exportVideo(sourceBlob, options, onProgress) {
 
 function pickMimeType() {
   const candidates = [
-    'video/webm;codecs=vp9,opus',
     'video/webm;codecs=vp8,opus',
-    'video/webm;codecs=vp9',
     'video/webm;codecs=vp8',
     'video/webm',
   ];
