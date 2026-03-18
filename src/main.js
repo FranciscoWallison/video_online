@@ -7,6 +7,7 @@ import { createCompositor } from './capture/compositor.js';
 import { createRecorder, mixAudioTracks } from './capture/recorder.js';
 import { selectRegion } from './ui/region-select.js';
 import { setupWebcamPosition, setupDraggableWebcam } from './ui/webcam-position.js';
+import { createFloatingPanel } from './ui/floating-panel.js';
 
 // ============ APP STATE ============
 const state = {
@@ -22,6 +23,9 @@ const state = {
   recorder: null,
   recordedBlob: null,
   blobUrl: null,
+  floatingPanel: null,
+  streamToRecord: null,
+  mixedAudioTracks: [],
   timerInterval: null,
   recordingStartTime: 0,
   pausedDuration: 0,
@@ -69,28 +73,40 @@ function initSetup() {
     state.micEnabled = e.target.checked;
   });
 
-  $('#btn-start-recording').addEventListener('click', startRecording);
+  $('#btn-start-recording').addEventListener('click', prepareRecording);
 }
 
-// ============ RECORDING ============
-async function startRecording() {
+// ============ PHASE 1: PREPARE (acquire streams, show floating panel) ============
+async function prepareRecording() {
   try {
+    // 1. Get screen stream
     state.screenStream = await startScreenCapture(
       state.captureType === 'region' ? 'monitor' : state.captureType,
       state.systemAudio
     );
 
+    // Handle stream ending externally (user clicks "Stop sharing")
     state.screenStream.getVideoTracks()[0].addEventListener('ended', () => {
       if (state.recorder && state.recorder.state !== 'inactive') {
         stopRecording();
+      } else {
+        cancelRecording();
       }
     });
 
+    // 2. Check displaySurface and warn
+    const settings = state.screenStream.getVideoTracks()[0].getSettings();
+    if (settings.displaySurface === 'browser') {
+      showToast('Aviso: os controles podem aparecer na gravação. Grave outra janela ou tela para evitar.', 'error', 5000);
+    }
+
+    // 3. Region selection
     if (state.captureType === 'region') {
       const dims = getStreamDimensions(state.screenStream);
       state.region = await selectRegion(dims);
       if (!state.region) {
         state.screenStream.getTracks().forEach(t => t.stop());
+        state.screenStream = null;
         showToast('Seleção de região cancelada', 'error');
         return;
       }
@@ -98,9 +114,9 @@ async function startRecording() {
       state.region = null;
     }
 
+    // 4. Setup compositor/stream
     const webcamStream = state.webcamEnabled ? getWebcamStream() : null;
     const needsCompositor = !!(webcamStream || state.region);
-    let streamToRecord;
 
     if (needsCompositor) {
       const canvas = /** @type {HTMLCanvasElement} */ ($('#recording-canvas'));
@@ -109,7 +125,7 @@ async function startRecording() {
         webcamPosition: state.webcamPosition,
       });
       await state.compositor.ready;
-      streamToRecord = state.compositor.start();
+      state.streamToRecord = state.compositor.start();
       canvas.classList.remove('hidden');
 
       if (webcamStream) {
@@ -119,7 +135,7 @@ async function startRecording() {
         setupDraggableWebcam(handle, $('.recording-preview-wrapper'), state.webcamPosition);
       }
     } else {
-      streamToRecord = state.screenStream;
+      state.streamToRecord = state.screenStream;
       state.compositor = null;
       $('#recording-canvas').classList.add('hidden');
 
@@ -139,7 +155,7 @@ async function startRecording() {
 
     $('#webcam-drag-handle').classList.toggle('hidden', !webcamStream);
 
-    // Audio
+    // 5. Prepare audio
     const audioTracks = [...state.screenStream.getAudioTracks()];
     if (state.micEnabled) {
       try {
@@ -149,13 +165,22 @@ async function startRecording() {
         showToast('Erro ao acessar microfone: ' + err.message, 'error');
       }
     }
+    state.mixedAudioTracks = mixAudioTracks(audioTracks);
 
-    state.recorder = createRecorder(streamToRecord, mixAudioTracks(audioTracks));
-    state.recorder.start();
-
+    // 6. Switch to recording view (shows preview) and hide inline controls
     switchView('recording');
-    startTimer();
-    showToast('Gravação iniciada!', 'success');
+    $('.recording-controls').classList.add('hidden');
+
+    // 7. Create and show floating panel
+    state.floatingPanel = createFloatingPanel({
+      onStart: beginRecording,
+      onPause: pauseRecording,
+      onResume: resumeRecording,
+      onStop: stopRecording,
+      onCancel: cancelRecording,
+    });
+    state.floatingPanel.show();
+
   } catch (err) {
     if (err.name === 'NotAllowedError') {
       showToast('Permissão de captura negada', 'error');
@@ -166,35 +191,45 @@ async function startRecording() {
   }
 }
 
-function initRecording() {
-  const btnPause = $('#btn-pause');
-  btnPause.addEventListener('click', () => {
-    if (!state.recorder) return;
-    if (state.recorder.state === 'recording') {
-      state.recorder.pause();
-      btnPause.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>';
-      btnPause.title = 'Retomar';
-      $('.rec-dot').classList.add('paused');
-      state.pauseStartTime = Date.now();
-    } else if (state.recorder.state === 'paused') {
-      state.recorder.resume();
-      btnPause.innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-      btnPause.title = 'Pausar';
-      $('.rec-dot').classList.remove('paused');
-      state.pausedDuration += Date.now() - state.pauseStartTime;
-    }
-  });
+// ============ PHASE 2: BEGIN (after countdown, start recording) ============
+function beginRecording() {
+  state.recorder = createRecorder(state.streamToRecord, state.mixedAudioTracks);
+  state.recorder.start();
 
-  $('#btn-stop').addEventListener('click', stopRecording);
+  state.floatingPanel.setState('recording');
+  startTimer();
+  showToast('Gravação iniciada!', 'success');
 }
 
+// ============ PAUSE / RESUME ============
+function pauseRecording() {
+  if (!state.recorder || state.recorder.state !== 'recording') return;
+  state.recorder.pause();
+  state.floatingPanel.setState('paused');
+  state.pauseStartTime = Date.now();
+}
+
+function resumeRecording() {
+  if (!state.recorder || state.recorder.state !== 'paused') return;
+  state.recorder.resume();
+  state.floatingPanel.setState('recording');
+  state.pausedDuration += Date.now() - state.pauseStartTime;
+}
+
+// ============ STOP RECORDING ============
 async function stopRecording() {
   if (!state.recorder) return;
 
   // Stop timer FIRST
   stopTimer();
 
-  // Stop all streams BEFORE stopping recorder to reduce load
+  // Destroy floating panel
+  if (state.floatingPanel) {
+    state.floatingPanel.destroy();
+    state.floatingPanel = null;
+  }
+
+  // Stop compositor
   if (state.compositor) {
     state.compositor.stop();
     state.compositor = null;
@@ -206,7 +241,7 @@ async function stopRecording() {
     pv.classList.add('hidden');
   }
 
-  // Now stop recorder and get blob
+  // Stop recorder and get blob
   let blob;
   try {
     blob = await state.recorder.stop();
@@ -216,22 +251,14 @@ async function stopRecording() {
   }
 
   // Stop remaining streams
-  if (state.screenStream) {
-    state.screenStream.getTracks().forEach(t => t.stop());
-    state.screenStream = null;
-  }
-  if (state.micStream) {
-    state.micStream.getTracks().forEach(t => t.stop());
-    state.micStream = null;
-  }
+  cleanupStreams();
 
   // Reset recording UI
-  $('#btn-pause').innerHTML = '<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-  $('.rec-dot').classList.remove('paused');
   $('#webcam-drag-handle').classList.add('hidden');
   $('#recording-canvas').classList.remove('hidden');
+  $('.recording-controls').classList.remove('hidden');
 
-  // Save blob — NO heavy processing here
+  // Save blob
   state.recordedBlob = blob;
   if (state.blobUrl) URL.revokeObjectURL(state.blobUrl);
   state.blobUrl = URL.createObjectURL(blob);
@@ -244,27 +271,71 @@ async function stopRecording() {
   $('#btn-quick-download').href = state.blobUrl;
   $('#btn-quick-download').download = 'recording.webm';
 
-  // Hide preview area (don't load video yet!)
+  // Hide preview area
   $('#preview-area').classList.add('hidden');
 
-  // Switch view — this is instant, no video loading
+  // Switch view
   switchView('editor');
   showToast('Gravação concluída!', 'success');
 }
 
+// ============ CANCEL (before recording starts) ============
+function cancelRecording() {
+  stopTimer();
+
+  if (state.floatingPanel) {
+    state.floatingPanel.destroy();
+    state.floatingPanel = null;
+  }
+
+  if (state.compositor) {
+    state.compositor.stop();
+    state.compositor = null;
+  }
+
+  const pv = $('#recording-preview-video');
+  if (pv) {
+    pv.srcObject = null;
+    pv.classList.add('hidden');
+  }
+
+  cleanupStreams();
+
+  $('#webcam-drag-handle').classList.add('hidden');
+  $('#recording-canvas').classList.remove('hidden');
+  $('.recording-controls').classList.remove('hidden');
+
+  state.recorder = null;
+  state.streamToRecord = null;
+  state.mixedAudioTracks = [];
+
+  switchView('setup');
+  showToast('Gravação cancelada', 'error');
+}
+
+function cleanupStreams() {
+  if (state.screenStream) {
+    state.screenStream.getTracks().forEach(t => t.stop());
+    state.screenStream = null;
+  }
+  if (state.micStream) {
+    state.micStream.getTracks().forEach(t => t.stop());
+    state.micStream = null;
+  }
+}
+
+// ============ TIMER ============
 function startTimer() {
   state.recordingStartTime = Date.now();
   state.pausedDuration = 0;
-  const timerEl = $('#rec-time');
   state.timerInterval = setInterval(() => {
     let elapsed = Date.now() - state.recordingStartTime - state.pausedDuration;
     if (state.recorder && state.recorder.state === 'paused') {
       elapsed -= (Date.now() - state.pauseStartTime);
     }
-    const secs = Math.floor(elapsed / 1000);
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    timerEl.textContent = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    if (state.floatingPanel) {
+      state.floatingPanel.updateTimer(elapsed);
+    }
   }, 500);
 }
 
@@ -277,18 +348,15 @@ function stopTimer() {
 
 // ============ DONE VIEW ============
 function initDoneView() {
-  // Preview button — only loads video when user explicitly clicks
   $('#btn-preview').addEventListener('click', () => {
     const area = $('#preview-area');
     const video = /** @type {HTMLVideoElement} */ ($('#editor-video'));
 
     if (area.classList.contains('hidden')) {
-      // Load video only now
       video.src = state.blobUrl;
       area.classList.remove('hidden');
       $('#btn-preview').textContent = 'Fechar Preview';
     } else {
-      // Unload video to free memory
       video.pause();
       video.removeAttribute('src');
       video.load();
@@ -297,16 +365,13 @@ function initDoneView() {
     }
   });
 
-  // New Recording
   $('#btn-new-recording').addEventListener('click', () => {
-    // Unload video
     const video = /** @type {HTMLVideoElement} */ ($('#editor-video'));
     video.pause();
     video.removeAttribute('src');
     video.load();
     $('#preview-area').classList.add('hidden');
 
-    // Free blob
     if (state.blobUrl) {
       URL.revokeObjectURL(state.blobUrl);
       state.blobUrl = null;
@@ -319,7 +384,6 @@ function initDoneView() {
 
 // ============ INIT ============
 initSetup();
-initRecording();
 initDoneView();
 
 // ============ PWA SERVICE WORKER ============
