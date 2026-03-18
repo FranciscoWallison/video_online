@@ -156,3 +156,10 @@
   border-color: var(--danger) !important;
   background: rgba(231, 76, 60, 0.15) !important;
 }
+
+/* Responsive */
+@media (max-width: 480px) {
+  .floating-panel { min-width: 170px; bottom: 12px; right: 12px; }
+  .fp-buttons button { width: 44px; height: 44px; }
+  .fp-btn-start, .fp-btn-cancel { min-height: 44px; }
+}

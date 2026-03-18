@@ -8,6 +8,15 @@ import { createRecorder, mixAudioTracks } from './capture/recorder.js';
 import { selectRegion } from './ui/region-select.js';
 import { setupWebcamPosition, setupDraggableWebcam } from './ui/webcam-position.js';
 import { createFloatingPanel } from './ui/floating-panel.js';
+import { isMobileDevice, hasScreenCapture } from './utils/device.js';
+import { showMobileMessage } from './ui/mobile-gate.js';
+
+// ============ PWA INSTALL PROMPT ============
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+});
 
 // ============ APP STATE ============
 const state = {
@@ -383,8 +392,12 @@ function initDoneView() {
 }
 
 // ============ INIT ============
-initSetup();
-initDoneView();
+if (isMobileDevice() || !hasScreenCapture()) {
+  showMobileMessage(deferredInstallPrompt);
+} else {
+  initSetup();
+  initDoneView();
+}
 
 // ============ PWA SERVICE WORKER ============
 if ('serviceWorker' in navigator) {

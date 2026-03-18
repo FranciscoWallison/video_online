@@ -43,35 +43,33 @@ export function selectRegion(streamDimensions) {
       }
     }
 
-    function onMouseDown(e) {
-      startX = e.clientX;
-      startY = e.clientY;
+    function onStart(clientX, clientY) {
+      startX = clientX;
+      startY = clientY;
       drawing = true;
     }
 
-    function onMouseMove(e) {
+    function onMove(clientX, clientY) {
       if (!drawing) return;
-      drawRect(startX, startY, e.clientX, e.clientY);
+      drawRect(startX, startY, clientX, clientY);
     }
 
-    function onMouseUp(e) {
+    function onEnd(clientX, clientY) {
       if (!drawing) return;
       drawing = false;
 
-      const x1 = Math.min(startX, e.clientX);
-      const y1 = Math.min(startY, e.clientY);
-      const w = Math.abs(e.clientX - startX);
-      const h = Math.abs(e.clientY - startY);
+      const x1 = Math.min(startX, clientX);
+      const y1 = Math.min(startY, clientY);
+      const w = Math.abs(clientX - startX);
+      const h = Math.abs(clientY - startY);
 
       cleanup();
 
-      // Ignore tiny selections
       if (w < 20 || h < 20) {
         resolve(null);
         return;
       }
 
-      // Scale from screen CSS pixels to captured stream resolution
       const scaleX = streamDimensions.width / window.innerWidth;
       const scaleY = streamDimensions.height / window.innerHeight;
 
@@ -82,6 +80,16 @@ export function selectRegion(streamDimensions) {
         height: Math.round(h * scaleY),
       });
     }
+
+    // Mouse handlers
+    function onMouseDown(e) { onStart(e.clientX, e.clientY); }
+    function onMouseMove(e) { onMove(e.clientX, e.clientY); }
+    function onMouseUp(e) { onEnd(e.clientX, e.clientY); }
+
+    // Touch handlers
+    function onTouchStart(e) { e.preventDefault(); onStart(e.touches[0].clientX, e.touches[0].clientY); }
+    function onTouchMove(e) { e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY); }
+    function onTouchEnd(e) { e.preventDefault(); onEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY); }
 
     function onKeyDown(e) {
       if (e.key === 'Escape') {
@@ -95,6 +103,9 @@ export function selectRegion(streamDimensions) {
       canvas.removeEventListener('mousedown', onMouseDown);
       canvas.removeEventListener('mousemove', onMouseMove);
       canvas.removeEventListener('mouseup', onMouseUp);
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', onTouchEnd);
       document.removeEventListener('keydown', onKeyDown);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
@@ -102,6 +113,9 @@ export function selectRegion(streamDimensions) {
     canvas.addEventListener('mousedown', onMouseDown);
     canvas.addEventListener('mousemove', onMouseMove);
     canvas.addEventListener('mouseup', onMouseUp);
+    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    canvas.addEventListener('touchend', onTouchEnd, { passive: false });
     document.addEventListener('keydown', onKeyDown);
   });
 }

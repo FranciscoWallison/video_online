@@ -22,22 +22,20 @@ export function setupDraggableWebcam(handleEl, containerEl, positionState) {
   let isDragging = false;
   let offsetX, offsetY;
 
-  handleEl.addEventListener('mousedown', (e) => {
+  function startDrag(clientX, clientY) {
     isDragging = true;
     const rect = handleEl.getBoundingClientRect();
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
+    offsetX = clientX - rect.left;
+    offsetY = clientY - rect.top;
     handleEl.style.cursor = 'grabbing';
-    e.preventDefault();
-  });
+  }
 
-  document.addEventListener('mousemove', (e) => {
+  function moveDrag(clientX, clientY) {
     if (!isDragging) return;
     const containerRect = containerEl.getBoundingClientRect();
-    let x = e.clientX - containerRect.left - offsetX;
-    let y = e.clientY - containerRect.top - offsetY;
+    let x = clientX - containerRect.left - offsetX;
+    let y = clientY - containerRect.top - offsetY;
 
-    // Clamp within container
     x = Math.max(0, Math.min(x, containerRect.width - handleEl.offsetWidth));
     y = Math.max(0, Math.min(y, containerRect.height - handleEl.offsetHeight));
 
@@ -46,16 +44,25 @@ export function setupDraggableWebcam(handleEl, containerEl, positionState) {
     handleEl.style.right = 'auto';
     handleEl.style.bottom = 'auto';
 
-    // Update state as percentages
     positionState.x = x / containerRect.width;
     positionState.y = y / containerRect.height;
     positionState.position = 'custom';
-  });
+  }
 
-  document.addEventListener('mouseup', () => {
+  function endDrag() {
     isDragging = false;
     handleEl.style.cursor = 'grab';
-  });
+  }
+
+  // Mouse events
+  handleEl.addEventListener('mousedown', (e) => { startDrag(e.clientX, e.clientY); e.preventDefault(); });
+  document.addEventListener('mousemove', (e) => { moveDrag(e.clientX, e.clientY); });
+  document.addEventListener('mouseup', endDrag);
+
+  // Touch events
+  handleEl.addEventListener('touchstart', (e) => { startDrag(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchmove', (e) => { if (isDragging) moveDrag(e.touches[0].clientX, e.touches[0].clientY); }, { passive: true });
+  document.addEventListener('touchend', endDrag);
 }
 
 function updateDragHandle(state) {

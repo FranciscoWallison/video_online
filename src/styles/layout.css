@@ -198,3 +198,16 @@
   font-size: 0.85rem;
   font-weight: 600;
 }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .app-header { padding: 12px 16px; gap: 8px; }
+  .logo { font-size: 1.2rem; }
+  .header-subtitle { font-size: 0.75rem; }
+  .app-main { padding: 16px; }
+  .toast-container { bottom: 16px; right: 16px; left: 16px; }
+  .toast { font-size: 0.85rem; }
+  .toggle-switch { width: 48px; height: 28px; }
+  .toggle-switch::after { width: 22px; height: 22px; }
+  .toggle-label input:checked + .toggle-switch::after { transform: translateX(20px); }
+}
