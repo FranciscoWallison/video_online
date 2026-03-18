@@ -1,0 +1,35 @@
+{
+  "name": "ScreenRec - Gravador de Tela Online Grátis",
+  "short_name": "ScreenRec",
+  "description": "Grave sua tela, webcam e áudio direto no navegador. Sem download, sem cadastro.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0f0f14",
+  "theme_color": "#6c5ce7",
+  "orientation": "any",
+  "lang": "pt-BR",
+  "categories": ["utilities", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nova Gravação",
+      "short_name": "Gravar",
+      "url": "./",
+      "description": "Iniciar uma nova gravação de tela"
+    }
+  ]
+}
